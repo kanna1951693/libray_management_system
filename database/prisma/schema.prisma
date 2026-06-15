@@ -86,6 +86,7 @@ model Loan {
   @@index([memberId])
   @@index([bookId])
   @@index([status])
+  @@index([dueDate])
 }
 
 model Hold {

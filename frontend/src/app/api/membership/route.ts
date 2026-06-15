@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createHash } from "crypto";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { generateMembershipId } from "@/lib/utils";
 
@@ -18,9 +18,7 @@ export async function POST(req: NextRequest) {
     const data = applySchema.parse(body);
 
     const existing = await prisma.member.findFirst({
-      where: {
-        OR: [{ email: data.email }, { studentId: data.studentId }],
-      },
+      where: { OR: [{ email: data.email }, { studentId: data.studentId }] },
     });
 
     if (existing) {
@@ -30,25 +28,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const tempPassword   = Math.random().toString(36).slice(-8);
-    const passwordHash   = createHash("sha256").update(tempPassword).digest("hex");
-    const membershipId   = generateMembershipId();
-    const expiresAt      = new Date();
+    const tempPassword = Math.random().toString(36).slice(-8);
+    // Use bcrypt with cost factor 12
+    const passwordHash = await bcrypt.hash(tempPassword, 12);
+    const membershipId = generateMembershipId();
+    const expiresAt    = new Date();
     expiresAt.setFullYear(expiresAt.getFullYear() + 1);
 
     const member = await prisma.member.create({
-      data: {
-        ...data,
-        membershipId,
-        passwordHash,
-        expiresAt,
-        status: "PENDING",
-      },
+      data: { ...data, membershipId, passwordHash, expiresAt, status: "PENDING" },
     });
 
     return NextResponse.json({
-      message:
-        "Application submitted. Await admin approval — you will receive login credentials by email.",
+      message:      "Application submitted. Await admin approval — you will receive login credentials by email.",
       membershipId: member.membershipId,
     });
   } catch (err: any) {

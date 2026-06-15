@@ -1,24 +1,18 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireMember } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { calculateFine } from "@/lib/utils";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
-  }
+  const { session, response } = await requireMember();
+  if (!session) return response!;
 
-  const memberId = (session.user as any).id;
+  const memberId = session.user.id;
 
+  // Auto-mark overdue loans
   await prisma.loan.updateMany({
-    where: {
-      memberId,
-      status:  "ACTIVE",
-      dueDate: { lt: new Date() },
-    },
-    data: { status: "OVERDUE" },
+    where: { memberId, status: "ACTIVE", dueDate: { lt: new Date() } },
+    data:  { status: "OVERDUE" },
   });
 
   const loans = await prisma.loan.findMany({

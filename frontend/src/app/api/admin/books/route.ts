@@ -1,16 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { requireAdmin } from "@/lib/session";
 import { z } from "zod";
-
-// Force TS re-evaluation of Prisma client types after schema update
-
-async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  if (!session || (session.user as any).role !== "ADMIN") return null;
-  return session;
-}
 
 const bookSchema = z.object({
   title:       z.string().min(1),
@@ -27,24 +18,25 @@ const bookSchema = z.object({
   location:    z.string().optional(),
 });
 
+const deleteSchema = z.object({
+  bookId: z.string().min(1),
+});
+
 export async function POST(req: NextRequest) {
-  const session = await requireAdmin();
-  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const { session, response } = await requireAdmin();
+  if (!session) return response!;
 
   try {
     const body = await req.json();
     const data = bookSchema.parse(body);
 
-    // Check if book already exists by ISBN
-    const existingBook = await prisma.book.findUnique({
-      where: { isbn: data.isbn },
-    });
+    const existingBook = await prisma.book.findUnique({ where: { isbn: data.isbn } });
 
     if (existingBook) {
       let mergedLocation = existingBook.location;
-      if (data.location && data.location.trim()) {
+      if (data.location?.trim()) {
         const newLoc = data.location.trim();
-        if (existingBook.location && existingBook.location.trim()) {
+        if (existingBook.location?.trim()) {
           if (!existingBook.location.includes(newLoc)) {
             mergedLocation = `${existingBook.location}; ${newLoc}`;
           }
@@ -57,73 +49,57 @@ export async function POST(req: NextRequest) {
         const updated = await tx.book.update({
           where: { id: existingBook.id },
           data: {
-            totalCopies: { increment: data.totalCopies },
+            totalCopies:     { increment: data.totalCopies },
             availableCopies: { increment: data.totalCopies },
-            location: mergedLocation,
+            location:        mergedLocation,
           },
         });
-
-        const currentCopiesCount = await tx.bookCopy.count({ where: { bookId: existingBook.id } });
+        const currentCount = await tx.bookCopy.count({ where: { bookId: existingBook.id } });
         const shortId = existingBook.id.replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase();
-        
-        const newCopies = [];
-        for (let i = 1; i <= data.totalCopies; i++) {
-          const padded = String(currentCopiesCount + i).padStart(3, "0");
-          const barcode = `BC-${shortId}-${existingBook.id.slice(-4).toUpperCase()}-${padded}`;
-          newCopies.push({
-            bookId: existingBook.id,
-            barcode,
-            status: "AVAILABLE" as const,
-            location: data.location || existingBook.location || null,
-          });
-        }
+        const newCopies = Array.from({ length: data.totalCopies }, (_, i) => ({
+          bookId:   existingBook.id,
+          barcode:  `BC-${shortId}-${existingBook.id.slice(-4).toUpperCase()}-${String(currentCount + i + 1).padStart(3, "0")}`,
+          status:   "AVAILABLE" as const,
+          location: data.location || existingBook.location || null,
+        }));
         await tx.bookCopy.createMany({ data: newCopies });
-
         return updated;
       });
-
       return NextResponse.json({ ...book, updated: true }, { status: 200 });
     }
 
     const book = await prisma.$transaction(async (tx) => {
-      const newBook = await tx.book.create({
-        data: { ...data, availableCopies: data.totalCopies },
-      });
-
+      const newBook = await tx.book.create({ data: { ...data, availableCopies: data.totalCopies } });
       const shortId = newBook.id.replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase();
-      const copies = [];
-      for (let i = 1; i <= data.totalCopies; i++) {
-        const padded = String(i).padStart(3, "0");
-        const barcode = `BC-${shortId}-${newBook.id.slice(-4).toUpperCase()}-${padded}`;
-        copies.push({
-          bookId: newBook.id,
-          barcode,
-          status: "AVAILABLE" as const,
-          location: data.location || null,
-        });
-      }
+      const copies = Array.from({ length: data.totalCopies }, (_, i) => ({
+        bookId:   newBook.id,
+        barcode:  `BC-${shortId}-${newBook.id.slice(-4).toUpperCase()}-${String(i + 1).padStart(3, "0")}`,
+        status:   "AVAILABLE" as const,
+        location: data.location || null,
+      }));
       await tx.bookCopy.createMany({ data: copies });
-
       return newBook;
     });
 
     return NextResponse.json(book, { status: 201 });
   } catch (err: any) {
-    if (err.name === "ZodError") {
-      return NextResponse.json({ error: err.errors }, { status: 422 });
-    }
-    if (err.code === "P2002") {
-      return NextResponse.json({ error: "ISBN already exists" }, { status: 409 });
-    }
+    if (err.name === "ZodError") return NextResponse.json({ error: err.errors }, { status: 422 });
+    if (err.code === "P2002")    return NextResponse.json({ error: "ISBN already exists" }, { status: 409 });
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
-  const session = await requireAdmin();
-  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const { session, response } = await requireAdmin();
+  if (!session) return response!;
 
-  const { bookId } = await req.json();
-  await prisma.book.delete({ where: { id: bookId } });
-  return NextResponse.json({ ok: true });
+  try {
+    const body = await req.json();
+    const { bookId } = deleteSchema.parse(body);
+    await prisma.book.delete({ where: { id: bookId } });
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    if (err.name === "ZodError") return NextResponse.json({ error: err.errors }, { status: 422 });
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
 }
