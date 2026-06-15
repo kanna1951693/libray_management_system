@@ -7,15 +7,12 @@ node_modules/
 .next/
 out/
 build/
+tsconfig.tsbuildinfo
 
 # env files (never commit secrets)
 .env
 .env.local
 .env.*.local
-
-# prisma
-prisma/dev.db
-prisma/dev.db-journal
 
 # debug
 npm-debug.log*
