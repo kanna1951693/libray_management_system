@@ -1,6 +1,8 @@
 # 📚 City Library Management System
 
 [![Vercel Deployment](https://img.shields.io/badge/Vercel-Deployed-success?logo=vercel&logoColor=white&style=for-the-badge)](https://frontend-xi-henna-98.vercel.app)
+[![Supabase](https://img.shields.io/badge/Supabase-Database-3ECF8E?logo=supabase&logoColor=white&style=for-the-badge)](https://supabase.com/)
+[![Twilio](https://img.shields.io/badge/Twilio-Communications-F22F46?logo=twilio&logoColor=white&style=for-the-badge)](https://www.twilio.com/)
 [![Prisma ORM](https://img.shields.io/badge/Prisma-ORM-2D3748?logo=prisma&logoColor=white&style=for-the-badge)](https://www.prisma.io/)
 [![Next.js 14](https://img.shields.io/badge/Next.js-14-black?logo=next.js&logoColor=white&style=for-the-badge)](https://nextjs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white&style=for-the-badge)](https://www.postgresql.org/)
@@ -11,10 +13,13 @@ The application features an immersive 3D floating book showcase, dynamic faceted
 
 ---
 
-## 🚀 Live Production URL
+## 🚀 Live Production & Architecture
 
-The project is fully built, optimized, and deployed on **Vercel**:
-🔗 **[https://frontend-xi-henna-98.vercel.app](https://frontend-xi-henna-98.vercel.app)**
+The application is deployed and hosted across production-ready services:
+- **Frontend Deployment (Vercel)**: Configured high-performance Next.js serverless rendering (SSR) and Edge API routes.
+  - 🔗 **Live Link**: [https://frontend-xi-henna-98.vercel.app](https://frontend-xi-henna-98.vercel.app)
+- **Database & Storage (Supabase)**: Relational PostgreSQL database + Supabase Storage buckets for persistent book cover uploads.
+- **OTP Verification & Alerts (Twilio)**: Handles mobile OTP identity verification code delivery and real-time transactional alerts (loans, returns, overdue).
 
 ---
 
@@ -25,7 +30,7 @@ The project is fully built, optimized, and deployed on **Vercel**:
 - **🗄️ Supabase Storage Integration** — Secure and high-performance bucket integration for dynamic book covers, eliminating the dependency on unverified third-party image URLs.
 - **💬 Twilio WhatsApp API** — Event-driven member notifications (for loans, returns, and overdue alerts) that gracefully fallback to a local mock logging system if credentials are not configured.
 - **🛡️ Multi-Role Authorization & Guards** — Role-based authorization layers supporting `MEMBER`, `LIBRARIAN`, and `ADMIN` profiles. Implemented custom session guards to secure backend APIs.
-- **📋 OTP Identity Verification** — Secure mobile OTP verification schema & workflows to register and validate users.
+- **📋 OTP Identity Verification** — Secure mobile OTP verification schema & workflows via **Twilio** to register and validate users.
 - **📈 Advanced Analytics** — Live library performance dashboard showcasing active loans, overdue statistics, queue length, and book analytics.
 
 ---
