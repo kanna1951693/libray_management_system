@@ -29,7 +29,39 @@ const CATEGORY_COLORS: Record<string, { from: string; to: string }> = {
   "Management":                    { from: "#bf360c", to: "#d84315" },
 };
 
-export function BookCard({ book }: { book: Book }) {
+function HighlightText({ text, highlight, color }: { text: string; highlight?: string; color: string }) {
+  if (!highlight || !highlight.trim()) {
+    return <span style={{ color }}>{text}</span>;
+  }
+
+  const regex = new RegExp(`(${highlight.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+  const parts = text.split(regex);
+
+  return (
+    <span style={{ color }}>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <mark
+            key={i}
+            style={{
+              background: "rgba(240,192,64,0.3)",
+              color: "inherit",
+              borderRadius: "2px",
+              padding: "0 1px",
+              fontWeight: 700,
+            }}
+          >
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </span>
+  );
+}
+
+export function BookCard({ book, highlight }: { book: Book; highlight?: string }) {
   const { theme }            = useTheme();
   const isDark               = theme === "dark";
 
@@ -105,12 +137,13 @@ export function BookCard({ book }: { book: Book }) {
         <Link href={`/book/${book.id}`}>
           <h3
             className="font-bold text-sm leading-snug line-clamp-2 mb-1 transition-colors"
-            style={{ color: text }}
           >
-            {book.title}
+            <HighlightText text={book.title} highlight={highlight} color={text} />
           </h3>
         </Link>
-        <p className="text-xs mb-0.5 line-clamp-1" style={{ color: muted }}>{book.author}</p>
+        <p className="text-xs mb-0.5 line-clamp-1">
+          <HighlightText text={book.author} highlight={highlight} color={muted} />
+        </p>
         <p className="text-xs mb-4" style={{ color: isDark ? "#555" : "#C4A882" }}>{book.year}</p>
 
         {/* Actions */}

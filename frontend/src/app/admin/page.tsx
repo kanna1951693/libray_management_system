@@ -8,9 +8,9 @@ import { formatDate, daysUntil } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeContext";
 
 type Member = {
-  id: string; name: string; email: string; studentId: string;
-  department: string; membershipId: string; status: string;
-  joinedAt: string; expiresAt: string;
+  id: string; name: string; email: string; aadharNumber: string;
+  department: string | null; membershipId: string; status: string;
+  joinedAt: string; expiresAt: string; phone?: string | null;
 };
 
 type AdminLoan = {
@@ -41,6 +41,11 @@ export default function AdminPage() {
   const [bookError,   setBookError]   = useState<string | null>(null);
   const [uploading,   setUploading]   = useState(false);
 
+  const [issueForm, setIssueForm] = useState({ membershipId: "", barcode: "" });
+  const [issueLoading, setIssueLoading] = useState(false);
+  const [issueSuccess, setIssueSuccess] = useState<string | null>(null);
+  const [issueError, setIssueError] = useState<string | null>(null);
+
   const CATEGORIES = [
     "Computer Science & Engineering","Electrical Engineering","Mechanical Engineering",
     "Civil Engineering","Physics","Chemistry","Mathematics","Biology",
@@ -69,8 +74,11 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (status === "unauthenticated") { router.push("/login"); return; }
-    if (status === "authenticated" && (session?.user as any)?.role !== "ADMIN") {
-      router.push("/dashboard");
+    if (status === "authenticated") {
+      const role = (session?.user as any)?.role;
+      if (role !== "ADMIN" && role !== "LIBRARIAN") {
+        router.push("/dashboard");
+      }
     }
   }, [status, session, router]);
 
@@ -103,6 +111,40 @@ export default function AdminPage() {
     });
     if (res.ok) {
       setLoans((prev) => prev.filter((l) => l.id !== loanId));
+    }
+  }
+
+  async function handleIssueBook(e: React.FormEvent) {
+    e.preventDefault();
+    setIssueLoading(true); setIssueSuccess(null); setIssueError(null);
+
+    try {
+      const res = await fetch("/api/admin/loans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          membershipId: issueForm.membershipId.trim(),
+          barcode:      issueForm.barcode.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      setIssueLoading(false);
+
+      if (res.ok) {
+        setIssueSuccess(`Book issued successfully! Due date: ${formatDate(data.dueDate)}`);
+        setIssueForm({ membershipId: "", barcode: "" });
+        
+        // Refresh loans
+        const loansRes = await fetch("/api/admin/loans");
+        const loansData = await loansRes.json();
+        setLoans(Array.isArray(loansData) ? loansData : []);
+      } else {
+        setIssueError(data.error || "Failed to issue book.");
+      }
+    } catch {
+      setIssueLoading(false);
+      setIssueError("An unexpected network error occurred.");
     }
   }
 
@@ -242,22 +284,28 @@ export default function AdminPage() {
       <div className="max-w-6xl mx-auto">
 
         {/* ── Header ── */}
-        <div className="flex items-start justify-between mb-10">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: accent }}>
-              Admin Panel
-            </p>
-            <h1 className="font-serif text-4xl sm:text-5xl font-bold" style={{ color: text }}>
-              Admin Dashboard
-            </h1>
-          </div>
-          <span
-            className="text-xs font-bold px-3 py-1.5 rounded-full mt-2"
-            style={{ background: isDark ? "rgba(240,192,64,0.12)" : "rgba(122,59,30,0.08)", color: accent, border: `1px solid ${accent}30` }}
-          >
-            Admin Mode
-          </span>
-        </div>
+        {(() => {
+          const role = (session?.user as any)?.role;
+          const isLibrarian = role === "LIBRARIAN";
+          return (
+            <div className="flex items-start justify-between mb-10">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: accent }}>
+                  {isLibrarian ? "Librarian Panel" : "Admin Panel"}
+                </p>
+                <h1 className="font-serif text-4xl sm:text-5xl font-bold" style={{ color: text }}>
+                  {isLibrarian ? "Librarian Dashboard" : "Admin Dashboard"}
+                </h1>
+              </div>
+              <span
+                className="text-xs font-bold px-3 py-1.5 rounded-full mt-2"
+                style={{ background: isDark ? "rgba(240,192,64,0.12)" : "rgba(122,59,30,0.08)", color: accent, border: `1px solid ${accent}30` }}
+              >
+                {isLibrarian ? "Librarian Mode" : "Admin Mode"}
+              </span>
+            </div>
+          );
+        })()}
 
         {/* ── Stats Row ── */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-10">
@@ -276,28 +324,38 @@ export default function AdminPage() {
         </div>
 
         {/* ── Tab Bar ── */}
-        <div
-          className="flex gap-1 p-1 rounded-2xl mb-8 w-fit"
-          style={{ background: cardBg, border: `1px solid ${border}` }}
-        >
-          {[
+        {(() => {
+          const role = (session?.user as any)?.role;
+          const isLibrarian = role === "LIBRARIAN";
+          const allTabs = [
             { key: "members",  label: "Manage Members" },
             { key: "loans",    label: `Loans & Returns${overdueCount > 0 ? ` (${overdueCount} overdue)` : ""}` },
             { key: "add-book", label: "Add Book" },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key as any)}
-              className="px-5 py-2 rounded-xl text-sm font-bold transition-all"
-              style={{
-                background: activeTab === tab.key ? accent : "transparent",
-                color: activeTab === tab.key ? (isDark ? "#080808" : "#FDFCF8") : muted,
-              }}
+          ];
+          const visibleTabs = isLibrarian
+            ? allTabs.filter((t) => t.key !== "add-book")
+            : allTabs;
+          return (
+            <div
+              className="flex gap-1 p-1 rounded-2xl mb-8 w-fit"
+              style={{ background: cardBg, border: `1px solid ${border}` }}
             >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+              {visibleTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key as any)}
+                  className="px-5 py-2 rounded-xl text-sm font-bold transition-all"
+                  style={{
+                    background: activeTab === tab.key ? accent : "transparent",
+                    color: activeTab === tab.key ? (isDark ? "#080808" : "#FDFCF8") : muted,
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* ══ TAB: MANAGE MEMBERS ══ */}
         {activeTab === "members" && (
@@ -327,7 +385,7 @@ export default function AdminPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ background: tableTh, borderBottom: `1px solid ${border}` }}>
-                      {["Member", "Student ID", "Department", "Membership ID", "Status", "Joined", "Actions"].map((h) => (
+                      {["Member", "Aadhar Number", "Phone Number", "Membership ID", "Status", "Joined", "Actions"].map((h) => (
                         <th key={h} className="text-left px-5 py-3.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: accent }}>
                           {h}
                         </th>
@@ -353,8 +411,8 @@ export default function AdminPage() {
                           <p className="font-semibold text-sm" style={{ color: text }}>{m.name}</p>
                           <p className="text-xs mt-0.5" style={{ color: muted }}>{m.email}</p>
                         </td>
-                        <td className="px-5 py-4 text-xs font-mono" style={{ color: muted }}>{m.studentId}</td>
-                        <td className="px-5 py-4 text-xs" style={{ color: muted }}>{m.department}</td>
+                        <td className="px-5 py-4 text-xs font-mono" style={{ color: muted }}>{m.aadharNumber}</td>
+                        <td className="px-5 py-4 text-xs" style={{ color: muted }}>{m.phone || "—"}</td>
                         <td className="px-5 py-4 text-xs font-mono" style={{ color: muted }}>{m.membershipId}</td>
                         <td className="px-5 py-4">
                           <span className="px-2.5 py-1 rounded-full text-xs font-bold" style={{ background: (STATUS_PILL[m.status] ?? STATUS_PILL.EXPIRED).bg, color: (STATUS_PILL[m.status] ?? STATUS_PILL.EXPIRED).color }}>
@@ -392,6 +450,64 @@ export default function AdminPage() {
         {/* ══ TAB: LOANS & RETURNS ══ */}
         {activeTab === "loans" && (
           <>
+            {/* ── Issue Book Form (Librarian only) ── */}
+            {(session?.user as any)?.role === "LIBRARIAN" && (
+            <div className="rounded-2xl p-6 mb-8" style={{ background: cardBg, border: `1px solid ${border}` }}>
+              <h2 className="font-serif text-xl font-bold mb-1" style={{ color: text }}>Issue a Book</h2>
+              <p className="text-xs mb-5" style={{ color: muted }}>
+                Enter the member's Membership ID and the book's physical barcode to check it out.
+              </p>
+              <form onSubmit={handleIssueBook} className="flex flex-col sm:flex-row gap-3 items-end">
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: muted }}>Membership ID</label>
+                  <input
+                    required
+                    placeholder="e.g. LIB-000001"
+                    value={issueForm.membershipId}
+                    onChange={(e) => setIssueForm((p) => ({ ...p, membershipId: e.target.value }))}
+                    className="w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all focus:ring-2"
+                    style={{ background: inputBg, color: text, border: `1px solid ${border}` }}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: muted }}>Book Barcode / Copy ID</label>
+                  <input
+                    required
+                    placeholder="e.g. COPY-00001"
+                    value={issueForm.barcode}
+                    onChange={(e) => setIssueForm((p) => ({ ...p, barcode: e.target.value }))}
+                    className="w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all focus:ring-2"
+                    style={{ background: inputBg, color: text, border: `1px solid ${border}` }}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={issueLoading}
+                  className="px-6 py-2.5 rounded-xl font-bold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 whitespace-nowrap"
+                  style={{ background: accent, color: isDark ? "#080808" : "#FDFCF8" }}
+                >
+                  {issueLoading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Issuing…
+                    </span>
+                  ) : "Issue Book"}
+                </button>
+              </form>
+
+              {issueSuccess && (
+                <div className="mt-4 rounded-xl px-4 py-3 text-sm font-medium" style={{ background: "rgba(34,197,94,0.10)", color: isDark ? "#22C55E" : "#166534", border: "1px solid rgba(34,197,94,0.25)" }}>
+                  ✓ {issueSuccess}
+                </div>
+              )}
+              {issueError && (
+                <div className="mt-4 rounded-xl px-4 py-3 text-sm font-medium" style={{ background: "rgba(239,68,68,0.10)", color: isDark ? "#EF4444" : "#B91C1C", border: "1px solid rgba(239,68,68,0.25)" }}>
+                  ✗ {issueError}
+                </div>
+              )}
+            </div>
+            )}
+
             <p className="text-sm mb-6" style={{ color: muted }}>
               All currently active and overdue loans. Use &quot;Mark Returned&quot; to process a physical book return.
             </p>

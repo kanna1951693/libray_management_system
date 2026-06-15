@@ -19,7 +19,7 @@ async function main() {
       data: {
         name:         "Library Admin",
         email:        "admin@library.local",
-        studentId:    "ADMIN001",
+        aadharNumber: "ADMIN001",
         department:   "Administration",
         membershipId: "LIB-ADMIN-001",
         passwordHash: hashPassword("Admin@1234"),

@@ -7,7 +7,7 @@ export type SessionUser = {
   id: string;
   email: string;
   name: string;
-  role: "ADMIN" | "MEMBER";
+  role: "ADMIN" | "MEMBER" | "LIBRARIAN";
   membershipId: string;
 };
 
@@ -24,7 +24,7 @@ export async function getAuthSession() {
 // ─── Require authenticated member ─────────────────────────────────────────────
 export async function requireMember() {
   const session = await getAuthSession();
-  if (!session) {
+  if (!session || session.user.role !== "MEMBER") {
     return {
       session: null,
       response: NextResponse.json({ error: "Unauthorised" }, { status: 401 }),
@@ -40,6 +40,30 @@ export async function requireAdmin() {
     return {
       session: null,
       response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+    };
+  }
+  return { session, response: null };
+}
+
+// ─── Require staff role (ADMIN or LIBRARIAN) ──────────────────────────────────
+export async function requireStaff() {
+  const session = await getAuthSession();
+  if (!session || (session.user.role !== "ADMIN" && session.user.role !== "LIBRARIAN")) {
+    return {
+      session: null,
+      response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+    };
+  }
+  return { session, response: null };
+}
+
+// ─── Require librarian role only ──────────────────────────────────────────────
+export async function requireLibrarian() {
+  const session = await getAuthSession();
+  if (!session || session.user.role !== "LIBRARIAN") {
+    return {
+      session: null,
+      response: NextResponse.json({ error: "Forbidden — only librarians can issue books" }, { status: 403 }),
     };
   }
   return { session, response: null };

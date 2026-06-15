@@ -1,29 +1,40 @@
 # City Library Management System
 
-A premium, modern, and interactive library management system built with Next.js 14, React, Three.js, Tailwind CSS, Prisma ORM, and PostgreSQL. It features responsive pages, a 3D book hero showcase, a dynamic book search engine, custom dashboards for members and admins, and a robust borrowing / reservation pipeline.
+A premium, modern, and interactive library management system built with **Next.js 14**, **React**, **Three.js**, **Tailwind CSS**, **Prisma ORM**, and **PostgreSQL**. It features a 3D book hero showcase, dynamic book search, custom dashboards for members and admins, a book reservation queue, Supabase-based image storage, and optional WhatsApp notifications via Twilio.
 
 ---
 
-## Tech Stack & Key Features
+## What's New / Improvements
 
-*   **Frontend Framework:** Next.js 14 (App Router) with TypeScript
-*   **Aesthetic & Styling:** Tailwind CSS, custom design tokens (light cream/espresso brown & dark black/warm yellow), CSS variables, and glassmorphism.
-*   **3D Interactive Elements:** Three.js, `@react-three/fiber`, and `@react-three/drei` for floating books and interactive UI cards.
-*   **Authentication:** NextAuth.js (Session-based, securely linking to custom database credentials).
-*   **Database Management (DBMS):** PostgreSQL served via Prisma ORM for type-safe database queries.
+- **Supabase Storage Integration** — Book cover images are now uploaded and served via Supabase Storage, removing the dependency on third-party CDN URLs.
+- **WhatsApp Notifications (Twilio)** — Members receive WhatsApp notifications on key events (loan issued, overdue reminders). Falls back to a local mock log file if Twilio is not configured.
+- **Librarian Role** — New `LIBRARIAN` role added alongside `MEMBER` and `ADMIN`. Librarians can issue/return books without full admin access.
+- **OTP Table** — New `Otp` model added to support phone-based one-time password flows for identity verification.
+- **Aadhar-based Identity** — Member identity is now verified via `aadharNumber` (Aadhaar) instead of a generic student ID.
+- **Overdue Loan Tracking** — Stats API now exposes live `overdueLoans` and `activeLoans` counts for the admin dashboard.
+- **Singleton Prisma Client** — Global Prisma Client pattern prevents connection pool exhaustion during Next.js hot-reloads.
+- **Role-scoped Session Guards** — `session.ts` exposes `requireMember`, `requireAdmin`, `requireStaff`, and `requireLibrarian` helpers used across all API routes.
 
 ---
 
-## Database Architecture & DBMS Design
+## Tech Stack
 
-This system leverages **PostgreSQL** as the core relational database management system (RDBMS) paired with **Prisma ORM** as the database connector and client.
+| Layer | Technology |
+|---|---|
+| Frontend Framework | Next.js 14 (App Router) + TypeScript |
+| Styling | Tailwind CSS + CSS Variables + Glassmorphism |
+| 3D Elements | Three.js, `@react-three/fiber`, `@react-three/drei` |
+| Authentication | NextAuth.js (credential-based, DB-linked) |
+| ORM | Prisma ORM |
+| Database | PostgreSQL 16 |
+| File Storage | Supabase Storage |
+| Notifications | Twilio WhatsApp API (optional) |
 
-### Client Connection Strategy (Prisma Singleton)
-To prevent connection leaks and exhaustion of PostgreSQL's client connection pool during Next.js hot-reloads, the application uses a **Singleton pattern** for the Prisma Client defined in `lib/db.ts`. In development, the client is attached to `globalThis` so it persists across hot-reloads, while in production it operates as a standard single instance.
+---
 
-### Database Schema Entity-Relationship Diagram (ERD)
+## Database Schema
 
-The relational schema represents the key entities of a library management system: books, physical copies, members, loans, and reservations (holds). Below is the Mermaid ERD:
+### Entity-Relationship Diagram (ERD)
 
 ```mermaid
 erDiagram
@@ -31,8 +42,8 @@ erDiagram
     Member ||--o{ Hold : "requests"
     Member ||--o{ Session : "has"
     Book ||--o{ BookCopy : "has"
-    Book ||--o{ Loan : "borrowed"
-    Book ||--o{ Hold : "reserved"
+    Book ||--o{ Loan : "borrowed as"
+    Book ||--o{ Hold : "reserved as"
     BookCopy ||--o{ Hold : "assigned-to"
 
     Book {
@@ -68,7 +79,7 @@ erDiagram
         String id PK
         String name
         String email UK
-        String studentId UK
+        String aadharNumber UK
         String department
         String phone
         String membershipId UK
@@ -79,6 +90,14 @@ erDiagram
         DateTime expiresAt
         DateTime createdAt
         DateTime updatedAt
+    }
+
+    Otp {
+        String id PK
+        String phone
+        String code
+        DateTime expiresAt
+        DateTime createdAt
     }
 
     Loan {
@@ -115,183 +134,225 @@ erDiagram
     }
 ```
 
----
+### Enums
 
-### Database Tables & Data Dictionary
+| Enum | Values |
+|---|---|
+| `Role` | `MEMBER`, `ADMIN`, `LIBRARIAN` |
+| `MemberStatus` | `PENDING`, `ACTIVE`, `EXPIRED`, `SUSPENDED` |
+| `LoanStatus` | `ACTIVE`, `RETURNED`, `OVERDUE` |
+| `HoldStatus` | `WAITING`, `READY`, `EXPIRED` |
+| `BookCopyStatus` | `AVAILABLE`, `CHECKED_OUT`, `ON_HOLD`, `LOST` |
 
-#### 1. Book (Metadata Table)
-Holds the library's metadata definitions.
-*   `id` (String, Primary Key): Unique CUID identifier.
-*   `isbn` (String, Unique): The International Standard Book Number.
-*   `totalCopies` (Int): Total copies purchased.
-*   `availableCopies` (Int): Currently borrowable copies.
-*   *Performance Indexes:* B-tree indexes are applied on `title`, `author`, `category`, and `isbn` to accelerate search queries and categorization lookups.
+### Data Dictionary
 
-#### 2. BookCopy (Physical Inventory)
-Tracks each unique physical copy of a book in the library.
-*   `id` (String, Primary Key): Unique CUID.
-*   `bookId` (String, Foreign Key): References `Book.id`.
-*   `barcode` (String, Unique): Unique scanned barcode on the physical book.
-*   `status` (Enum `BookCopyStatus`): `AVAILABLE`, `CHECKED_OUT`, `ON_HOLD`, `LOST`.
-*   *Performance Indexes:* Indexes applied on `bookId` and `status` to quickly fetch and update available copies.
+#### Book
+Holds library catalogue metadata. B-tree indexes on `title`, `author`, `category`, `isbn` accelerate search queries.
 
-#### 3. Member (User Accounts)
-Contains credentials and profile settings for both students and library administrators.
-*   `id` (String, Primary Key): Unique CUID.
-*   `email` (String, Unique): Account email (also used as login ID).
-*   `studentId` & `membershipId` (String, Unique): Institutional IDs.
-*   `passwordHash` (String): SHA-256 hashed password.
-*   `role` (Enum `Role`): `MEMBER` or `ADMIN`.
-*   `status` (Enum `MemberStatus`): `PENDING` (needs approval), `ACTIVE` (can login), `EXPIRED`, `SUSPENDED`.
+#### BookCopy
+Tracks each physical copy. `barcode` is the unique shelf label. Indexes on `bookId` and `status` for fast availability checks.
 
-#### 4. Loan (Transaction Log)
-Tracks checkout logs, borrowing windows, returns, and renewals.
-*   `id` (String, Primary Key): Unique CUID.
-*   `memberId` (String, Foreign Key): References `Member.id`.
-*   `bookId` (String, Foreign Key): References `Book.id`.
-*   `status` (Enum `LoanStatus`): `ACTIVE`, `RETURNED`, `OVERDUE`.
-*   *Performance Indexes:* Indexes applied on `memberId`, `bookId`, and `status` to optimize search and dashboard queries.
+#### Member
+User accounts for students, admins, and librarians. `aadharNumber` is the government-issued identity field. `passwordHash` uses SHA-256. Members start as `PENDING` until an admin approves them.
 
-#### 5. Hold (Reservations Queue)
-Manages waiting lists for books that are currently checked out.
-*   `id` (String, Primary Key): Unique CUID.
-*   `memberId` & `bookId` (String, Foreign Keys).
-*   `copyId` (String, Nullable Foreign Key): Assigned physical copy when it becomes available.
-*   `position` (Int): Queue order position.
-*   `status` (Enum `HoldStatus`): `WAITING` (in queue), `READY` (reserved for member pickup), `EXPIRED`.
+#### Otp
+Stores short-lived OTP codes (linked by `phone`) for identity verification flows. Indexed on `phone`.
+
+#### Loan
+Transaction log of all checkouts. `dueDate` is auto-set to 14 days from issue. Indexed on `memberId`, `bookId`, `status`, and `dueDate`.
+
+#### Hold
+FIFO reservation queue. `position` determines priority. `copyId` is assigned when a copy becomes available and the hold becomes `READY`.
+
+#### Session
+NextAuth.js session tokens. Cascade-deleted when the related member is deleted.
 
 ---
 
-## Application Workflows & State Logic
+## Application Workflows
 
-### 1. Membership Application & Authentication Flow
+### 1. Membership & Authentication Flow
 ```
-[User Registration Form] ──> Status: PENDING 
-                                  │
-                                  ▼
-[Admin Dashboard] ─────────> Clicks "Approve" (Status: ACTIVE)
-                                  │
-                                  ▼
-[Login Panel] ─────────────> Standard NextAuth Session (SHA-256 Credential Match)
+[Registration Form] ──> status: PENDING
+                              │
+                              ▼
+[Admin Dashboard] ──> Approve (status: ACTIVE)
+                              │
+                              ▼
+[Login Page] ──> NextAuth Credential Auth ──> Session Created
 ```
 
 ### 2. Borrowing & Hold Lifecycle
-1.  **Checkout:** When a member borrows a book:
-    *   A `Loan` record is created (with a 14-day `dueDate`).
-    *   The `Book.availableCopies` value is decremented.
-    *   The corresponding `BookCopy` status changes to `CHECKED_OUT`.
-2.  **Return:** When a book is returned:
-    *   The `Loan.returnedAt` timestamp is populated, and status becomes `RETURNED`.
-    *   `Book.availableCopies` is incremented.
-    *   `BookCopy` status reverts to `AVAILABLE`.
-3.  **Holds:** If `availableCopies == 0`, a member can place a `Hold`:
-    *   A `Hold` record is inserted with `status: WAITING`.
-    *   The member is placed in a FIFO queue (`position` increments).
-    *   Upon book return, the system updates the highest priority hold (`position: 1`) to `status: READY` and sets the `copyId`.
 
----
+1. **Checkout:** `Loan` created → `Book.availableCopies` decremented → `BookCopy.status = CHECKED_OUT`
+2. **Return:** `Loan.returnedAt` set → `status = RETURNED` → `availableCopies` incremented → If hold queue exists, top hold → `READY`
+3. **Hold Queue:** If `availableCopies == 0` → `Hold` created with `status: WAITING` and FIFO `position`
 
-## Deployment Guide
-
-Follow these instructions to deploy both the PostgreSQL Database and the Next.js Frontend.
-
-### Phase 1: Deploy the Database (DBMS)
-You can deploy your PostgreSQL database on **Neon.tech**, **Supabase**, or **Render**.
-
-#### Option A: Neon (Serverless PostgreSQL - Recommended)
-1.  Sign up at [Neon.tech](https://neon.tech) and create a new project.
-2.  Select **PostgreSQL 16**.
-3.  Copy the connection string (with pooled connections `?pgbouncer=true` if using serverless functions). It will look like:
-    ```
-    postgresql://[user]:[password]@[host]/[dbname]?sslmode=require
-    ```
-
-#### Option B: Supabase
-1.  Go to [Supabase.com](https://supabase.com) and create a project.
-2.  In Database Settings, copy the **Transaction Connection String** (Port `6543`) for your environment variables.
-
----
-
-### Phase 2: Deploy the Frontend on Vercel
-Since this is a Next.js app, deploying on **Vercel** is highly optimized and straightforward.
-
-1.  Push your code to a GitHub, GitLab, or Bitbucket repository.
-2.  Login to [Vercel](https://vercel.com) and click **Add New** -> **Project**.
-3.  Import your repository.
-4.  Configure the **Environment Variables** (expand the toggle):
-    *   `DATABASE_URL`: Add your PostgreSQL connection string from Phase 1.
-    *   `NEXTAUTH_SECRET`: Generate a random hash (e.g., run `openssl rand -base64 32` in your terminal).
-    *   `NEXTAUTH_URL`: Enter your deployed canonical production URL (e.g., `https://my-library-app.vercel.app`) or leave blank for Vercel to automatically resolve it.
-5.  In **Build and Development Settings**, ensure the Install Command is `npm install` and the Build Command is `npm run build`.
-6.  Click **Deploy**.
-
----
-
-### Phase 3: Run Production Migrations & Seed Admin
-Vercel builds will fail if the database schema is not provisioned. To push the database schema and add the admin user in production:
-
-1.  Install the Prisma CLI globally or use `npx`.
-2.  Ensure you have your production database connection string in your local `.env` file, or run the command inline:
-    ```bash
-    # Push the schema to your remote database
-    DATABASE_URL="your-production-db-connection-string" npx prisma db push
-    
-    # Run the seeder to populate the initial admin account
-    DATABASE_URL="your-production-db-connection-string" npm run db:seed
-    ```
-3.  *(Alternative)* You can add a post-install hook inside `package.json` to auto-migrate:
-    ```json
-    "build": "prisma generate && prisma db push && next build"
-    ```
+### 3. WhatsApp Notification Flow
+```
+[Loan / Overdue Event]
+       │
+       ▼
+[sendWhatsAppMessage()]
+       │
+       ├─── Twilio credentials set? ──> POST to Twilio WhatsApp API
+       │
+       └─── No credentials? ──────────> Mock log to whatsapp_mock_logs.txt
+```
 
 ---
 
 ## Local Development Setup
 
-To run this application locally, follow these steps:
+### Prerequisites
 
-### 1. Prerequisites
-*   **Node.js 20 LTS** or higher
-*   **PostgreSQL 16** running locally
+| Requirement | Version |
+|---|---|
+| Node.js | 20 LTS or higher |
+| PostgreSQL | 16 (via Homebrew or installer) |
+| npm | Bundled with Node.js |
 
-### 2. Setup Guide
-1.  **Clone the Repository & Install Dependencies:**
-    ```bash
-    cd assignments-library-website
-    npm install
-    ```
+---
 
-2.  **Database Creation:**
-    Create a new database locally via `psql` or pgAdmin:
-    ```sql
-    CREATE DATABASE library_db;
-    ```
+### Step 1 — Clone & Install
 
-3.  **Environment Setup:**
-    Create a `.env` file in the root directory:
-    ```bash
-    cp .env.example .env
-    ```
-    Open `.env` and enter your connection credentials:
-    ```env
-    DATABASE_URL="postgresql://postgres:mypassword@localhost:5432/library_db"
-    NEXTAUTH_SECRET="your-super-secret-random-key"
-    NEXTAUTH_URL="http://localhost:3000"
-    ```
+```bash
+git clone https://github.com/your-username/librr.git
+cd librr/frontend
+npm install
+```
 
-4.  **Database Migration & Seeding:**
-    Push the schema rules to PostgreSQL and create the primary admin credential:
-    ```bash
-    npm run db:push
-    npm run db:seed
-    ```
-    *   *Default Admin Login:* `admin@library.local` / `Admin@1234`
+---
 
-5.  **Run Development Server:**
-    ```bash
-    npm run dev
-    ```
-    Open [http://localhost:3000](http://localhost:3000) in your web browser.
+### Step 2 — Create the PostgreSQL Database
+
+Open `psql` (or use pgAdmin / TablePlus) and run:
+
+```sql
+CREATE DATABASE library_db;
+```
+
+> **Homebrew users:** Your default PostgreSQL user is your macOS username with no password.
+> Connection string: `postgresql://your_mac_username@localhost:5432/library_db`
+
+---
+
+### Step 3 — Configure Environment Variables
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and fill in at minimum:
+
+```env
+# Required
+DATABASE_URL="postgresql://postgres:yourpassword@localhost:5432/library_db"
+NEXTAUTH_SECRET="run: openssl rand -base64 32"
+NEXTAUTH_URL="http://localhost:3000"
+
+# Required for book cover uploads
+NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+
+# Optional — WhatsApp notifications (leave blank to use mock log mode)
+TWILIO_ACCOUNT_SID="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+TWILIO_AUTH_TOKEN="your-auth-token"
+TWILIO_WHATSAPP_FROM="+14155238886"
+```
+
+> **Generate `NEXTAUTH_SECRET`:**
+> ```bash
+> openssl rand -base64 32
+> ```
+
+---
+
+### Step 4 — Push Schema & Seed Database
+
+```bash
+# From the project root (librr/)
+npx prisma db push --schema=database/prisma/schema.prisma
+
+# Seed admin account (admin@library.local / Admin@1234)
+npx tsx database/prisma/seed.ts
+
+# (Optional) Seed book catalogue
+npx tsx database/prisma/seed-books.ts
+
+# (Optional) Seed physical copies for each book
+npx tsx database/prisma/seed-copies.ts
+```
+
+Or use the npm scripts from inside `frontend/`:
+
+```bash
+npm run db:push
+npm run db:seed
+```
+
+> **Default Admin Credentials:**
+> - Email: `admin@library.local`
+> - Password: `Admin@1234`
+
+---
+
+### Step 5 — Start the Dev Server
+
+```bash
+cd frontend
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+---
+
+### Troubleshooting Local Setup
+
+| Problem | Fix |
+|---|---|
+| `ECONNREFUSED` on DATABASE_URL | PostgreSQL is not running. Run `brew services start postgresql@16` |
+| `prisma: command not found` | Use `npx prisma` instead |
+| Supabase upload fails | Ensure `SUPABASE_SERVICE_ROLE_KEY` is set and the `book-covers` storage bucket exists in your Supabase project |
+| WhatsApp 63007 error | Your Twilio `From` number is not registered for WhatsApp. Use the Sandbox number or leave Twilio blank to use Mock Mode |
+| WhatsApp 70051 error | Auth Token is invalid or does not have messaging permissions. Rotate your Auth Token in the Twilio Console |
+| Login always fails | Check `NEXTAUTH_SECRET` is set. Re-run `npm run db:seed` to ensure the admin account exists |
+
+---
+
+## Deployment (Production)
+
+### Phase 1 — Database
+
+Deploy PostgreSQL on **Neon.tech** (recommended), **Supabase**, or **Render**:
+
+1. Sign up at [neon.tech](https://neon.tech) → Create Project → Select PostgreSQL 16.
+2. Copy the pooled connection string:
+   ```
+   postgresql://user:password@host/dbname?sslmode=require
+   ```
+
+### Phase 2 — Push Schema to Production DB
+
+```bash
+DATABASE_URL="your-production-connection-string" npx prisma db push --schema=database/prisma/schema.prisma
+DATABASE_URL="your-production-connection-string" npx tsx database/prisma/seed.ts
+```
+
+### Phase 3 — Deploy Frontend on Vercel
+
+1. Push your code to GitHub.
+2. Import the repo at [vercel.com](https://vercel.com) → **Add New → Project**.
+3. Set **Root Directory** to `frontend`.
+4. Add all environment variables from your `.env` in the Vercel Environment Variables panel.
+5. Click **Deploy**.
+
+> **Vercel build command** (auto-migrates on deploy):
+> ```json
+> "build": "prisma generate && next build"
+> ```
 
 ---
 
@@ -299,47 +360,62 @@ To run this application locally, follow these steps:
 
 ```
 librr/
-├── backend/                        # Reserved for future standalone backend services
 ├── database/
 │   └── prisma/
-│       ├── schema.prisma           # Data model definitions (Book, Member, Loan, Hold)
-│       ├── seed.ts                 # Seeds default admin account
-│       ├── seed-books.ts           # Seeds library book catalogue
-│       └── seed-copies.ts         # Seeds physical book copies
+│       ├── schema.prisma            # Full data model (Book, Member, Loan, Hold, Otp)
+│       ├── seed.ts                  # Seeds default admin account
+│       ├── seed-books.ts            # Seeds library book catalogue
+│       └── seed-copies.ts          # Seeds physical book copies
 ├── docs/
-│   ├── README.md                   # Full technical documentation & ERD
-│   └── SETUP.md                    # Step-by-step local setup guide
+│   └── README.md                    # Documentation mirror
 ├── frontend/
+│   ├── .env.example                 # Environment variable template
 │   └── src/
 │       ├── app/
-│       │   ├── api/                # API route handlers
-│       │   │   ├── admin/          # Admin member management endpoints
-│       │   │   ├── auth/           # NextAuth authentication
-│       │   │   ├── books/          # Book CRUD & category endpoints
-│       │   │   ├── dashboard/      # Member loans & history endpoints
-│       │   │   ├── holds/          # Book reservation endpoints
-│       │   │   ├── membership/     # Membership application endpoint
-│       │   │   └── stats/          # Library statistics endpoint
-│       │   ├── admin/              # Admin console UI
-│       │   ├── book/[id]/          # Book details page
-│       │   ├── dashboard/          # Member dashboard (loans, holds, history)
-│       │   ├── login/              # Sign-in page
-│       │   ├── membership/         # Apply form and rules pages
-│       │   ├── search/             # Book search and filters page
-│       │   ├── layout.tsx          # Root layout shell
-│       │   └── page.tsx            # Homepage with 3D hero
+│       │   ├── api/
+│       │   │   ├── admin/           # Member management + book uploads (admin)
+│       │   │   │   ├── books/       # Admin book CRUD
+│       │   │   │   ├── loans/       # Admin loan management
+│       │   │   │   ├── members/     # Member approval & management
+│       │   │   │   └── upload-image/ # Supabase cover image upload
+│       │   │   ├── auth/            # NextAuth [...nextauth] handler
+│       │   │   ├── books/           # Public book search & detail
+│       │   │   ├── dashboard/       # Member loans, holds, history
+│       │   │   ├── holds/           # Place / cancel holds
+│       │   │   ├── membership/      # New member registration
+│       │   │   └── stats/           # Library statistics (cached 60s)
+│       │   ├── admin/               # Admin console UI
+│       │   ├── book/[id]/           # Book detail page
+│       │   ├── dashboard/           # Member dashboard
+│       │   ├── login/               # Sign-in page
+│       │   ├── membership/          # Registration & rules pages
+│       │   ├── search/              # Book search & filter page
+│       │   ├── layout.tsx           # Root layout shell
+│       │   └── page.tsx             # Homepage with 3D hero
 │       ├── components/
-│       │   ├── hero/               # Three.js 3D floating canvas & elements
-│       │   ├── layout/             # Navbar and Footer
-│       │   ├── search/             # BookCard, SearchBar, CategoryFilter
-│       │   └── ui/                 # Shared reusable UI primitives
+│       │   ├── BookCarousel.tsx     # Featured books carousel
+│       │   ├── Providers.tsx        # NextAuth + Theme context providers
+│       │   ├── SidebarLogin.tsx     # Slide-in login sidebar
+│       │   ├── ThemeContext.tsx     # Light/dark theme context
+│       │   ├── hero/                # Three.js 3D floating book canvas
+│       │   ├── layout/              # Navbar and Footer
+│       │   ├── search/              # BookCard, SearchBar, CategoryFilter
+│       │   └── ui/                  # Shared UI primitives
 │       └── lib/
-│           ├── db.ts               # Prisma Client singleton
-│           ├── auth.ts             # NextAuth configuration
-│           └── utils.ts            # Date helpers, fine calculators, ID generators
+│           ├── auth.ts              # NextAuth options & credential provider
+│           ├── db.ts                # Prisma Client singleton
+│           ├── session.ts           # requireAdmin / requireMember / requireStaff guards
+│           ├── supabase.ts          # Supabase client (public + admin)
+│           ├── utils.ts             # Date helpers, fine calculators, ID generators
+│           └── whatsapp.ts          # Twilio WhatsApp sender (with mock fallback)
 ├── .gitignore
 ├── LICENSE.txt
 ├── README.md
-└── render.yaml                     # Render.com deployment configuration
+└── render.yaml                      # Render.com deployment config
 ```
 
+---
+
+## License
+
+MIT — see [LICENSE.txt](./LICENSE.txt).

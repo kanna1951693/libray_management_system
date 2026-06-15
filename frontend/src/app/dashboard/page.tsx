@@ -18,6 +18,8 @@ type Loan = {
 type Hold = {
   id: string;
   position: number;
+  status: "WAITING" | "READY" | "EXPIRED";
+  expiresAt: string | null;
   requestedAt: string;
   book: { id: string; title: string; author: string };
   copy: { id: string; barcode: string } | null;
@@ -29,6 +31,7 @@ export default function DashboardPage() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [holds, setHolds] = useState<Hold[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingMap, setCancellingMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -45,6 +48,29 @@ export default function DashboardPage() {
       setLoading(false);
     });
   }, [status]);
+
+  async function handleCancelHold(holdId: string) {
+    if (!confirm("Are you sure you want to cancel this hold?")) return;
+
+    setCancellingMap((prev) => ({ ...prev, [holdId]: true }));
+    try {
+      const res = await fetch("/api/holds", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ holdId }),
+      });
+      if (res.ok) {
+        setHolds((prev) => prev.filter((h) => h.id !== holdId));
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to cancel hold.");
+      }
+    } catch {
+      alert("Failed to cancel hold due to network error.");
+    } finally {
+      setCancellingMap((prev) => ({ ...prev, [holdId]: false }));
+    }
+  }
 
   if (status === "loading" || loading) {
     return (
@@ -197,10 +223,18 @@ export default function DashboardPage() {
         ) : (
           <div className="space-y-3">
             {holds.map((hold) => (
-              <div key={hold.id} className="glass rounded-xl p-4 flex items-center gap-4">
-                <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center text-sm font-bold text-blue-400 shrink-0">
-                  #{hold.position}
-                </div>
+              <div key={hold.id} className={`glass rounded-xl p-4 flex items-center gap-4 border transition-all ${
+                hold.status === "READY" ? "border-green-500/25" : "border-transparent"
+              }`}>
+                {hold.status === "READY" ? (
+                  <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center text-sm font-bold text-green-400 shrink-0 animate-pulse">
+                    ✓
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center text-sm font-bold text-blue-400 shrink-0">
+                    #{hold.position}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <Link href={`/book/${hold.book.id}`} className="font-medium text-sm hover:text-blue-400 transition-colors line-clamp-1">
                     {hold.book.title}
@@ -212,9 +246,46 @@ export default function DashboardPage() {
                         Copy: {hold.copy.barcode}
                       </span>
                     )}
+                    {hold.status === "READY" ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/15 text-green-400 font-semibold animate-pulse">
+                        Ready for Pickup
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-400">
+                        In Queue
+                      </span>
+                    )}
                   </div>
+                  {hold.status === "READY" && hold.expiresAt && (
+                    <p className="text-[10px] text-green-400/80 mt-1">
+                      Pick up by {formatDate(hold.expiresAt)}
+                    </p>
+                  )}
                 </div>
-                <p className="text-gray-500 text-xs shrink-0">Requested {formatDate(hold.requestedAt)}</p>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right hidden sm:block mr-1">
+                    <p className="text-gray-400 text-[10px]">Requested</p>
+                    <p className="text-gray-500 text-[10px] font-medium">{formatDate(hold.requestedAt)}</p>
+                  </div>
+                  <button
+                    onClick={() => handleCancelHold(hold.id)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all"
+                    style={{
+                      borderColor: "rgba(239, 68, 68, 0.2)",
+                      background: "rgba(239, 68, 68, 0.05)",
+                      color: "#EF4444",
+                    }}
+                    disabled={cancellingMap[hold.id]}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "rgba(239, 68, 68, 0.15)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "rgba(239, 68, 68, 0.05)";
+                    }}
+                  >
+                    {cancellingMap[hold.id] ? "Cancelling…" : "Cancel"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
