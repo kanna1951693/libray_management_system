@@ -298,25 +298,48 @@ To run this application locally, follow these steps:
 ## Project Directory Structure
 
 ```
-├── app/
-│   ├── api/                   # API routes for books, members, loans, holds, stats
-│   ├── admin/                 # Admin console UI (Membership management)
-│   ├── book/[id]/             # Book details page
-│   ├── dashboard/             # Member loans, holds, and history dashboard
-│   ├── login/                 # Sign-in page
-│   ├── membership/            # Apply forms and rules
-│   ├── search/                # Book Search and Filters page
-│   ├── layout.tsx             # Main layout shell
-│   └── page.tsx               # Homepage with 3D elements
-├── components/
-│   ├── hero/                  # Three.js 3D floating canvas and elements
-│   ├── ui/                    # Shared reusable UI elements (buttons, inputs)
-│   └── layout/                # Navbars and Footer
-├── lib/
-│   ├── db.ts                  # Prisma Client singleton
-│   ├── auth.ts                # NextAuth options and configurations
-│   └── utils.ts               # Date helpers, fines, and IDs generators
-└── prisma/
-    ├── schema.prisma          # Data Models definitions
-    └── seed.ts                # Script to seed default database tables
+librr/
+├── backend/                        # Reserved for future standalone backend services
+├── database/
+│   └── prisma/
+│       ├── schema.prisma           # Data model definitions (Book, Member, Loan, Hold)
+│       ├── seed.ts                 # Seeds default admin account
+│       ├── seed-books.ts           # Seeds library book catalogue
+│       └── seed-copies.ts         # Seeds physical book copies
+├── docs/
+│   ├── README.md                   # Full technical documentation & ERD
+│   └── SETUP.md                    # Step-by-step local setup guide
+├── frontend/
+│   └── src/
+│       ├── app/
+│       │   ├── api/                # API route handlers
+│       │   │   ├── admin/          # Admin member management endpoints
+│       │   │   ├── auth/           # NextAuth authentication
+│       │   │   ├── books/          # Book CRUD & category endpoints
+│       │   │   ├── dashboard/      # Member loans & history endpoints
+│       │   │   ├── holds/          # Book reservation endpoints
+│       │   │   ├── membership/     # Membership application endpoint
+│       │   │   └── stats/          # Library statistics endpoint
+│       │   ├── admin/              # Admin console UI
+│       │   ├── book/[id]/          # Book details page
+│       │   ├── dashboard/          # Member dashboard (loans, holds, history)
+│       │   ├── login/              # Sign-in page
+│       │   ├── membership/         # Apply form and rules pages
+│       │   ├── search/             # Book search and filters page
+│       │   ├── layout.tsx          # Root layout shell
+│       │   └── page.tsx            # Homepage with 3D hero
+│       ├── components/
+│       │   ├── hero/               # Three.js 3D floating canvas & elements
+│       │   ├── layout/             # Navbar and Footer
+│       │   ├── search/             # BookCard, SearchBar, CategoryFilter
+│       │   └── ui/                 # Shared reusable UI primitives
+│       └── lib/
+│           ├── db.ts               # Prisma Client singleton
+│           ├── auth.ts             # NextAuth configuration
+│           └── utils.ts            # Date helpers, fine calculators, ID generators
+├── .gitignore
+├── LICENSE.txt
+├── README.md
+└── render.yaml                     # Render.com deployment configuration
 ```
+
