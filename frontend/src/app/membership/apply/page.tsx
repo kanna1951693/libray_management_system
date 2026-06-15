@@ -8,7 +8,7 @@ import { useSession } from "next-auth/react";
 export default function ApplyPage() {
   const { data: session } = useSession();
   const [form, setForm] = useState({
-    name: "", email: "", aadharNumber: "", phone: "", otpCode: "",
+    name: "", email: "", password: "", aadharNumber: "", phone: "", otpCode: "",
   });
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -85,7 +85,7 @@ export default function ApplyPage() {
     setLoading(false);
 
     if (res.ok) {
-      setSuccess(`Application submitted! Your membership ID is ${data.membershipId}. You will receive login credentials by email once approved.`);
+      setSuccess(`Application submitted! Your membership ID is ${data.membershipId}. You will be able to log in with your email and password once approved by a librarian.`);
     } else {
       setError(data.error ?? "Something went wrong. Please try again.");
     }
@@ -151,6 +151,17 @@ export default function ApplyPage() {
             <input
               name="email" type="email" value={form.email} onChange={change} required
               placeholder="you@example.com"
+              className="w-full glass px-4 py-3 rounded-xl text-white placeholder-gray-500 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+
+          {/* Password */}
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Password *</label>
+            <input
+              name="password" type="password" value={form.password} onChange={change} required
+              placeholder="Choose a password (min 6 characters)"
+              minLength={6}
               className="w-full glass px-4 py-3 rounded-xl text-white placeholder-gray-500 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
           </div>
@@ -250,7 +261,7 @@ export default function ApplyPage() {
 
           <button
             type="submit"
-            disabled={loading || !otpSent}
+            disabled={loading || !otpSent || !agreed}
             className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 font-medium transition-colors"
           >
             {loading ? "Submitting…" : "Submit Application"}

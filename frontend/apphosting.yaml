@@ -1,0 +1,61 @@
+runConfig:
+  minInstances: 0
+  maxInstances: 10
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  # ─── NextAuth ──────────────────────────────────────────────────────────────
+  - variable: NEXTAUTH_URL
+    value: https://library-management-75851.web.app
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXTAUTH_SECRET
+    secret: NEXTAUTH_SECRET
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # ─── Database ──────────────────────────────────────────────────────────────
+  - variable: DATABASE_URL
+    secret: DATABASE_URL
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # ─── Supabase (public keys — safe to inline) ────────────────────────────────
+  - variable: NEXT_PUBLIC_SUPABASE_URL
+    value: https://dzskrtfqaamftbbgudcd.supabase.co
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_SUPABASE_ANON_KEY
+    value: sb_publishable_Hlcd0wM67PDV6KvHJB_mRw_08fJ5yF1
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: SUPABASE_SERVICE_ROLE_KEY
+    secret: SUPABASE_SERVICE_ROLE_KEY
+    availability:
+      - RUNTIME
+
+  # ─── Twilio WhatsApp (optional) ─────────────────────────────────────────────
+  - variable: TWILIO_ACCOUNT_SID
+    secret: TWILIO_ACCOUNT_SID
+    availability:
+      - RUNTIME
+
+  - variable: TWILIO_AUTH_TOKEN
+    secret: TWILIO_AUTH_TOKEN
+    availability:
+      - RUNTIME
+
+  - variable: TWILIO_WHATSAPP_FROM
+    value: "+14155238886"
+    availability:
+      - RUNTIME

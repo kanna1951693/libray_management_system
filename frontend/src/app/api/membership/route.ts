@@ -8,6 +8,7 @@ import { generateMembershipId } from "@/lib/utils";
 const applySchema = z.object({
   name:         z.string().min(2).max(100),
   email:        z.string().email(),
+  password:     z.string().min(6, "Password must be at least 6 characters"),
   aadharNumber: z.string().regex(/^\d{12}$/, "Aadhar number must be exactly 12 digits"),
   phone:        z.string().min(10, "Phone number must be at least 10 characters"),
   otpCode:      z.string().length(6, "Verification code must be exactly 6 digits"),
@@ -57,8 +58,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const tempPassword = Math.random().toString(36).slice(-8);
-    const passwordHash = await bcrypt.hash(tempPassword, 12);
+    const passwordHash = await bcrypt.hash(data.password, 12);
     const membershipId = generateMembershipId();
     const expiresAt    = new Date();
     expiresAt.setFullYear(expiresAt.getFullYear() + 1);
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({
-      message:      "Application submitted. Await librarian approval — you will receive login credentials by email.",
+      message:      "Application submitted. Once approved by a librarian, you will be able to log in with your email and password.",
       membershipId: member.membershipId,
     });
   } catch (err: any) {
