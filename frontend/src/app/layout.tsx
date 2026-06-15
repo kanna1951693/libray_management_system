@@ -3,6 +3,7 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title:       "City Library",
@@ -22,6 +23,7 @@ export default function RootLayout({
           <main className="flex-1">{children}</main>
           <Footer />
         </Providers>
+        <SpeedInsights />
       </body>
     </html>
   );
