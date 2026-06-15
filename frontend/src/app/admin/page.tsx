@@ -39,6 +39,7 @@ export default function AdminPage() {
   const [bookLoading, setBookLoading] = useState(false);
   const [bookSuccess, setBookSuccess] = useState<string | null>(null);
   const [bookError,   setBookError]   = useState<string | null>(null);
+  const [uploading,   setUploading]   = useState(false);
 
   const CATEGORIES = [
     "Computer Science & Engineering","Electrical Engineering","Mechanical Engineering",
@@ -102,6 +103,35 @@ export default function AdminPage() {
     });
     if (res.ok) {
       setLoans((prev) => prev.filter((l) => l.id !== loanId));
+    }
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setBookError(null);
+    setBookSuccess(null);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/admin/upload-image", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBookForm((prev) => ({ ...prev, coverImage: data.url }));
+      } else {
+        setBookError(data.error || "Failed to upload image.");
+      }
+    } catch {
+      setBookError("Failed to upload image due to network or server error.");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -497,13 +527,60 @@ export default function AdminPage() {
 
                 <div>
                   <label className="block text-xs font-semibold mb-1.5" style={{ color: muted }}>
-                    Cover Image URL
-                    <span className="ml-2 font-normal opacity-70">(from Open Library, Google Books, etc.)</span>
+                    Cover Image
                   </label>
-                  <input name="coverImage" value={bookForm.coverImage} onChange={handleBookChange} placeholder="https://covers.openlibrary.org/b/isbn/9780...L.jpg" className={inputClass} style={inputStyle} />
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1">
+                      <input
+                        name="coverImage"
+                        value={bookForm.coverImage}
+                        onChange={handleBookChange}
+                        placeholder="Paste image URL or use the upload button →"
+                        className={inputClass}
+                        style={inputStyle}
+                        disabled={uploading}
+                      />
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="cover-upload"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                        disabled={uploading}
+                      />
+                      <label
+                        htmlFor="cover-upload"
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer transition-all border whitespace-nowrap"
+                        style={{
+                          background: isDark ? "rgba(240,192,64,0.08)" : "rgba(122,59,30,0.05)",
+                          color: accent,
+                          borderColor: isDark ? "rgba(240,192,64,0.2)" : "rgba(122,59,30,0.2)",
+                          opacity: uploading ? 0.6 : 1,
+                          pointerEvents: uploading ? "none" : "auto",
+                        }}
+                      >
+                        {uploading ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            <span>Uploading…</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                            <span>Upload File</span>
+                          </>
+                        )}
+                      </label>
+                    </div>
+                  </div>
+                  
                   {bookForm.coverImage && (
-                    <div className="mt-2 flex items-center gap-3">
-                      <div className="w-10 h-14 relative rounded-lg overflow-hidden">
+                    <div className="mt-4 flex items-center gap-3">
+                      <div className="w-12 h-16 relative rounded-xl overflow-hidden border" style={{ borderColor: border }}>
                         <Image
                           src={bookForm.coverImage}
                           alt="Cover preview"
@@ -513,7 +590,12 @@ export default function AdminPage() {
                           unoptimized
                         />
                       </div>
-                      <span className="text-xs" style={{ color: muted }}>Cover preview</span>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-semibold" style={{ color: text }}>Cover Preview</span>
+                        <span className="text-[10px] font-mono opacity-60 truncate max-w-[200px] sm:max-w-md" style={{ color: muted }}>
+                          {bookForm.coverImage}
+                        </span>
+                      </div>
                     </div>
                   )}
                 </div>
